@@ -79,19 +79,14 @@ class NonBondedInteraction(ScriptInterfaceHelper, metaclass=abc.ABCMeta):
 
         for x in np.linspace(min_val, max_val, steps):
             try:
-                energy_value = energy.subs(r, x / steps)
-                force_value = force.subs(r, x / steps)
+                energy_value = energy.subs(r, x)
+                force_value = force.subs(r, x)
                 if energy_value.is_real and energy_value == energy_value:
-                    energy_tab.append(energy_value)
+                    energy_tab.append(float(energy_value))
                 if force_value.is_real and force_value == force_value:
-                    force_tab.append(force_value)
-
+                    force_tab.append(float(force_value))
             except (ZeroDivisionError, ValueError):
                 continue
-        if "shift" in kwargs.keys():
-            j = kwargs.pop("shift")
-            energy_tab = [float(x*j) for x in energy_tab]
-            force_tab = [float(x*j) for x in force_tab]
         return energy_tab, force_tab
 
     @abc.abstractmethod
