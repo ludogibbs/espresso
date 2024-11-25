@@ -19,6 +19,8 @@
 
 import abc
 import enum
+from sympy import sympify, symbols
+import numpy as np
 from . import code_features
 from .script_interface import ScriptObjectMap, ScriptInterfaceHelper, script_interface_register
 
@@ -56,6 +58,41 @@ class NonBondedInteraction(ScriptInterfaceHelper, metaclass=abc.ABCMeta):
 
         err_msg = f"setting {self.__class__.__name__} raised an error"
         self.call_method("set_params", handle_errors_message=err_msg, **params)
+
+    def get_table(self, **kwargs):
+        min_val = kwargs.pop("min")
+        max_val = kwargs.pop("max")
+        steps = kwargs.pop("steps")
+        expression = kwargs.pop("f")
+        r = symbols("r")
+        energy = sympify(expression)
+        force = -1 * energy.diff(r)
+
+        for i in kwargs.keys():
+            if str(i) in expression:
+                j = symbols(i)
+                energy = energy.subs(j, kwargs[i])
+                force = force.subs(j, kwargs[i])
+
+        energy_tab = []
+        force_tab = []
+
+        for x in np.linspace(min_val, max_val, steps):
+            try:
+                energy_value = energy.subs(r, x / steps)
+                force_value = force.subs(r, x / steps)
+                if energy_value.is_real and energy_value == energy_value:
+                    energy_tab.append(energy_value)
+                if force_value.is_real and force_value == force_value:
+                    force_tab.append(force_value)
+
+            except (ZeroDivisionError, ValueError):
+                continue
+        if "shift" in kwargs.keys():
+            j = kwargs.pop("shift")
+            energy_tab = [float(x*j) for x in energy_tab]
+            force_tab = [float(x*j) for x in force_tab]
+        return energy_tab, force_tab
 
     @abc.abstractmethod
     def default_params(self):
@@ -341,7 +378,6 @@ class TabulatedNonBonded(NonBondedInteraction):
             The force table.
 
     """
-
     _so_name = "Interactions::InteractionTabulated"
     _so_feature = "TABULATED"
 
