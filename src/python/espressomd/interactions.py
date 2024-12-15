@@ -19,6 +19,8 @@
 
 import abc
 import enum
+from sympy import sympify, symbols,oo,nan
+import numpy as np
 from . import code_features
 from .script_interface import ScriptObjectMap, ScriptInterfaceHelper, script_interface_register
 
@@ -56,6 +58,7 @@ class NonBondedInteraction(ScriptInterfaceHelper, metaclass=abc.ABCMeta):
 
         err_msg = f"setting {self.__class__.__name__} raised an error"
         self.call_method("set_params", handle_errors_message=err_msg, **params)
+
 
     @abc.abstractmethod
     def default_params(self):
@@ -341,7 +344,6 @@ class TabulatedNonBonded(NonBondedInteraction):
             The force table.
 
     """
-
     _so_name = "Interactions::InteractionTabulated"
     _so_feature = "TABULATED"
 
@@ -350,6 +352,81 @@ class TabulatedNonBonded(NonBondedInteraction):
 
         """
         return {}
+    
+    def set_params(self, **kwargs):
+        """Set new parameters.
+
+        """
+        params = self.default_params()
+        params.update(kwargs)
+
+        if "energy" not in params or "force" not in params:
+            required_keys = {"min", "max", "steps", "f"}
+            missing_keys = required_keys - params.keys()
+            if missing_keys:
+                raise ValueError(
+                    f"Missing keys for table generation: {missing_keys}. "
+                    f"To generate energy and force tables, provide {required_keys}."
+                )
+        
+            # Berechnung von Energie- und Krafttabellen mit `get_table`
+            energy_tab, force_tab = self.get_table(
+                min=params["min"],
+                max=params["max"],
+                steps=params["steps"],
+                f=params["f"],
+                **{k: v for k, v in params.items() if k not in required_keys}  # Zusätzliche Parameter
+            )
+            params["energy"] = energy_tab
+            params["force"] = force_tab
+
+        relevant_keys = {"min", "max", "energy", "force"}
+        filtered_params = {k: params[k] for k in relevant_keys if k in params}
+
+        err_msg = f"setting {self.__class__.__name__} raised an error"
+        self.call_method("set_params", handle_errors_message=err_msg, **filtered_params)
+
+        
+
+    def get_table(self, **kwargs):
+        """
+        Generate energy and force tables.
+        """
+        # Erforderliche Parameter extrahieren
+        try:
+            min_val = kwargs["min"]
+            max_val = kwargs["max"]
+            steps = kwargs["steps"]
+            expression = kwargs["f"]
+        except KeyError as e:
+            raise ValueError(f"Missing required parameter: {e.args[0]}") from e
+
+        # Symbole und Ausdrücke vorbereiten
+        r = symbols("r")
+        energy = sympify(expression)
+        force = -energy.diff(r)
+
+        # Zusätzliche Variablen ersetzen
+        for var, value in kwargs.items():
+            if str(var) in expression:
+                symbol = symbols(var)
+                energy = energy.subs(symbol, value)
+                force = force.subs(symbol, value)
+
+        # Tabellen berechnen
+        x_values = np.linspace(min_val, max_val, steps)
+        energy_tab = [
+            float(energy.subs(r, x))
+            for x in x_values
+            if energy.subs(r, x).is_real and not energy.subs(r, x).has(oo, nan)
+        ]
+        force_tab = [
+            float(force.subs(r, x))
+            for x in x_values
+            if force.subs(r, x).is_real and not force.subs(r, x).has(oo, nan)
+        ]
+
+        return energy_tab, force_tab
 
     @property
     def cutoff(self):
