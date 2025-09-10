@@ -32,7 +32,7 @@
 
 #include "config/config.hpp"
 
-#ifdef P3M
+#ifdef ESPRESSO_P3M
 
 #include "actor/traits.hpp"
 
@@ -115,7 +115,7 @@ struct elc_data {
   /** The space that is finally left. */
   double space_box;
 
-#ifdef SHARED_MEMORY_PARALLELISM
+#ifdef ESPRESSO_SHARED_MEMORY_PARALLELISM
   static auto copy_aosoa_vector_elc(std::size_t i, auto &slice) {
     return Utils::Vector3d{slice(i, 0), slice(i, 1), slice(i, 2)};
   }
@@ -143,7 +143,7 @@ struct elc_data {
       kernel(q_eff, d);
     }
   }
-#endif // SHARED_MEMORY_PARALLELISM
+#endif // ESPRESSO_SHARED_MEMORY_PARALLELISM
 
   /// pairwise contributions from lower and upper layers
   void dielectric_layers_contribution(BoxGeometry const &box_geo,
@@ -277,7 +277,7 @@ struct ElectrostaticLayerCorrection
     return {};
   }
 
-#ifdef SHARED_MEMORY_PARALLELISM
+#ifdef ESPRESSO_SHARED_MEMORY_PARALLELISM
   /** @brief Calculate short-range pair energy correction. */
   double pair_energy_correction(std::size_t p1, std::size_t p2, auto &aosoa,
                                 double q1q2) const {
@@ -303,17 +303,16 @@ struct ElectrostaticLayerCorrection
     }
     return energy;
   }
-#endif // SHARED_MEMORY_PARALLELISM
+#endif // ESPRESSO_SHARED_MEMORY_PARALLELISM
 
   /** @brief Calculate short-range pair energy correction. */
-  double pair_energy_correction(Particle const &p1, Particle const &p2,
+  double pair_energy_correction(Utils::Vector3d const &pos1,
+                                Utils::Vector3d const &pos2,
                                 double q1q2) const {
     double energy = 0.;
     if (elc.dielectric_contrast_on) {
       energy = std::visit(
-          [this, &p1, &p2, q1q2](auto &p3m_ptr) {
-            auto const &pos1 = p1.pos();
-            auto const &pos2 = p2.pos();
+          [this, &pos1, &pos2, q1q2](auto &p3m_ptr) {
             auto const &p3m = *p3m_ptr;
             auto energy = 0.;
             elc.dielectric_layers_contribution(
@@ -334,23 +333,23 @@ struct ElectrostaticLayerCorrection
   }
 
   /** @brief Add short-range pair force corrections. */
-  void add_pair_force_corrections(Particle &p1, Particle &p2,
-                                  double q1q2) const {
+  void add_pair_force_corrections(Utils::Vector3d const &pos1,
+                                  Utils::Vector3d const &pos2,
+                                  ParticleForce &p1f_asym,
+                                  ParticleForce &p2f_asym, double q1q2) const {
     if (elc.dielectric_contrast_on) {
       std::visit(
-          [this, &p1, &p2, q1q2](auto &p3m_ptr) {
-            auto const &pos1 = p1.pos();
-            auto const &pos2 = p2.pos();
+          [this, &pos1, &pos2, &p1f_asym, &p2f_asym, q1q2](auto &p3m_ptr) {
             auto const &p3m = *p3m_ptr;
             elc.dielectric_layers_contribution(
                 *m_box_geo, pos1, pos2, q1q2,
                 [&](double q_eff, Utils::Vector3d const &d) {
-                  p1.force() += p3m.pair_force(q_eff, d, d.norm());
+                  p1f_asym.f += p3m.pair_force(q_eff, d, d.norm());
                 });
             elc.dielectric_layers_contribution(
                 *m_box_geo, pos2, pos1, q1q2,
                 [&](double q_eff, Utils::Vector3d const &d) {
-                  p2.force() += p3m.pair_force(q_eff, d, d.norm());
+                  p2f_asym.f += p3m.pair_force(q_eff, d, d.norm());
                 });
           },
           base_solver);
@@ -394,4 +393,4 @@ private:
   }
 };
 
-#endif // P3M
+#endif // ESPRESSO_P3M

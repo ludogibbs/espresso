@@ -21,7 +21,7 @@
 
 #include <config/config.hpp>
 
-#ifdef SHARED_MEMORY_PARALLELISM
+#ifdef ESPRESSO_SHARED_MEMORY_PARALLELISM
 
 #include <Cabana_VerletList.hpp>
 
@@ -53,6 +53,15 @@ public:
     neighbors = Kokkos::View<int **, Kokkos::LayoutRight, MemorySpace>(
         Kokkos::ViewAllocateWithoutInitializing("neighbors"), num_particles,
         max_neigh);
+  }
+
+  // Method to realloc _data
+  KOKKOS_INLINE_FUNCTION
+  void reallocData(std::size_t const num_particles,
+                   std::size_t const max_neigh) {
+    Kokkos::realloc(counts, num_particles);
+    Kokkos::realloc(Kokkos::WithoutInitializing, neighbors, num_particles,
+                    max_neigh);
   }
 
   // Method to add a neighbor
@@ -193,4 +202,4 @@ public:
   }
 };
 
-#endif // SHARED_MEMORY_PARALLELISM
+#endif // ESPRESSO_SHARED_MEMORY_PARALLELISM

@@ -27,11 +27,11 @@
 #include "errorhandling.hpp"
 #include "fft/init.hpp"
 
-#ifdef WALBERLA
+#ifdef ESPRESSO_WALBERLA
 #include <walberla_bridge/walberla_init.hpp>
 #endif
 
-#ifdef SHARED_MEMORY_PARALLELISM
+#ifdef ESPRESSO_SHARED_MEMORY_PARALLELISM
 #include <Cabana_Core.hpp>
 #include <Kokkos_Core.hpp>
 #include <omp.h>
@@ -53,7 +53,7 @@
 #include <tuple>
 #include <utility>
 
-#ifdef SHARED_MEMORY_PARALLELISM
+#ifdef ESPRESSO_SHARED_MEMORY_PARALLELISM
 namespace Communication {
 struct KokkosHandle {
   KokkosHandle() { Kokkos::initialize(); }
@@ -64,7 +64,7 @@ struct KokkosHandle {
 
 boost::mpi::communicator comm_cart;
 Communicator communicator{};
-#ifdef SHARED_MEMORY_PARALLELISM
+#ifdef ESPRESSO_SHARED_MEMORY_PARALLELISM
 std::shared_ptr<Communication::KokkosHandle> kokkos_handle{};
 #endif
 
@@ -91,7 +91,7 @@ int this_node = -1;
 
 namespace Communication {
 void init(std::shared_ptr<boost::mpi::environment> mpi_env) {
-#ifdef SHARED_MEMORY_PARALLELISM
+#ifdef ESPRESSO_SHARED_MEMORY_PARALLELISM
   const char *const env_omp_num_threads = std::getenv("OMP_NUM_THREADS");
   if (not env_omp_num_threads or std::strlen(env_omp_num_threads) == 0ul) {
     omp_set_num_threads(1);
@@ -103,32 +103,33 @@ void init(std::shared_ptr<boost::mpi::environment> mpi_env) {
   Communication::m_callbacks =
       std::make_shared<Communication::MpiCallbacks>(comm_cart, mpi_env);
 
-  ErrorHandling::init_error_handling(Communication::m_callbacks);
+  ErrorHandling::init_error_handling(comm_cart);
 
-#ifdef WALBERLA
+#ifdef ESPRESSO_WALBERLA
   walberla::mpi_init();
 #endif
 
-#ifdef CUDA
+#ifdef ESPRESSO_CUDA
   cuda_on_program_start();
 #endif
 
-#ifdef FFTW
+#ifdef ESPRESSO_FFTW
   fft_on_program_start();
 #endif
 
-#ifdef SHARED_MEMORY_PARALLELISM
+#ifdef ESPRESSO_SHARED_MEMORY_PARALLELISM
   kokkos_handle = std::make_shared<KokkosHandle>();
 #endif
 }
 
 void deinit() {
-  ErrorHandling::deinit_error_handling();
-  Communication::m_callbacks.reset();
-
-#ifdef SHARED_MEMORY_PARALLELISM
+#ifdef ESPRESSO_SHARED_MEMORY_PARALLELISM
+  Kokkos::fence();
   kokkos_handle.reset();
 #endif
+
+  ErrorHandling::deinit_error_handling();
+  Communication::m_callbacks.reset();
 }
 } // namespace Communication
 

@@ -19,11 +19,12 @@
 
 #pragma once
 
-#include "config/config.hpp"
+#include <config/config.hpp>
 
-#ifdef WALBERLA
+#ifdef ESPRESSO_WALBERLA
 
 #include "EKFFT.hpp"
+#include "EKFFT_GPU.hpp"
 #include "EKNone.hpp"
 #include "EKReactions.hpp"
 #include "EKSpecies.hpp"
@@ -31,6 +32,7 @@
 #include <walberla_bridge/electrokinetics/EKContainer.hpp>
 #include <walberla_bridge/electrokinetics/EKinWalberlaBase.hpp>
 
+#include "core/communication.hpp"
 #include "core/ek/EKWalberla.hpp"
 #include "core/ek/Solver.hpp"
 #include "core/system/System.hpp"
@@ -51,8 +53,11 @@ class EKContainer : public ObjectList<EKSpecies> {
   using Base::value_type;
 
   std::variant<
-#ifdef WALBERLA_FFT
+#ifdef ESPRESSO_WALBERLA_FFT
       std::shared_ptr<EKFFT>,
+#ifdef ESPRESSO_CUDA
+      std::shared_ptr<EKFFTGPU>,
+#endif
 #endif
       std::shared_ptr<EKNone>>
       m_poisson_solver;
@@ -98,11 +103,17 @@ class EKContainer : public ObjectList<EKSpecies> {
     if (auto ptr = std::dynamic_pointer_cast<EKNone>(so_ptr)) {
       solver = std::move(ptr);
     }
-#ifdef WALBERLA_FFT
+#ifdef ESPRESSO_WALBERLA_FFT
+#ifdef ESPRESSO_CUDA
+    else if (auto ptr = std::dynamic_pointer_cast<EKFFTGPU>(so_ptr)) {
+      solver = std::move(ptr);
+      assert(::comm_cart.size() == 1 && "EKFFTGPU only supports 1 MPI rank");
+    }
+#endif // ESPRESSO_CUDA
     else if (auto ptr = std::dynamic_pointer_cast<EKFFT>(so_ptr)) {
       solver = std::move(ptr);
     }
-#endif
+#endif // ESPRESSO_WALBERLA_FFT
     assert(solver.has_value());
     return *solver;
   }
@@ -173,4 +184,4 @@ protected:
 
 } // namespace ScriptInterface::walberla
 
-#endif // WALBERLA
+#endif // ESPRESSO_WALBERLA
